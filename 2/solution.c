@@ -13,7 +13,7 @@
 /**
  * You can compile and run this code using the commands:
  *
- * $> gcc -Wextra -Werror -Wall -Wno-gnu-folding-constant solution.c parser.c -o main
+ * $> gcc -Wextra -Werror -Wall -Wno-gnu-folding-constant solution.c parser.c -o a.out
  * $> ./main
  */
 
@@ -23,27 +23,9 @@ execute_command_line(const struct command_line *line)
 	/* REPLACE THIS CODE WITH ACTUAL COMMAND EXECUTION */
 
 	assert(line != NULL);
-	printf("================================\n");
-	printf("Command line:\n");
-	printf("Is background: %d\n", (int)line->is_background);
-	printf("Output: ");
-	if (line->out_type == OUTPUT_TYPE_STDOUT) {
-		printf("stdout\n");
-	} else if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
-		printf("new file - \"%s\"\n", line->out_file);
-	} else if (line->out_type == OUTPUT_TYPE_FILE_APPEND) {
-		printf("append file - \"%s\"\n", line->out_file);
-	} else {
-		assert(false);
-	}
-	printf("Expressions:\n");
 	const struct expr *e = line->head;
 	while (e != NULL) {
 		if (e->type == EXPR_TYPE_COMMAND) {
-			printf("\tCommand: %s", e->cmd.exe);
-			for (uint32_t i = 0; i < e->cmd.arg_count; ++i)
-				printf(" %s", e->cmd.args[i]);
-			printf("\n");
 			if (strcmp(e->cmd.exe, "exit") == 0 && e->next == NULL && e->cmd.arg_count == 0) {
                 exit(0);
 			} else if (strcmp(e->cmd.exe, "cd") == 0) {
@@ -55,13 +37,10 @@ execute_command_line(const struct command_line *line)
 			}
 		} else if (e->type == EXPR_TYPE_PIPE) {
 			printf("\tPIPE\n");
-            assert(false);
 		} else if (e->type == EXPR_TYPE_AND) {
 			printf("\tAND\n");
-            assert(false);
 		} else if (e->type == EXPR_TYPE_OR) {
 			printf("\tOR\n");
-            assert(false);
 		} else {
 			assert(false);
 		}
@@ -75,10 +54,6 @@ execute_command_line(const struct command_line *line)
             perror("fork");
             exit(1);
         case 0:
-            printf(" CHILD: Это процесс-потомок!\n");
-            printf(" CHILD: Мой PID -- %d\n", getpid());
-            printf(" CHILD: PID моего родителя -- %d\n", getppid());
-
             if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
                 int fd = open(line->out_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
                 dup2(fd, STDOUT_FILENO);
@@ -90,17 +65,17 @@ execute_command_line(const struct command_line *line)
                 dup2(fd, STDERR_FILENO);
                 close(fd);
             }
-            execlp(line->head->cmd.exe, line->head->cmd.exe, NULL);
+            char **argv = calloc(line->head->cmd.arg_count + 2, sizeof(argv));
+            argv[0] = line->head->cmd.exe;
+            for (uint32_t i = 0; i < line->head->cmd.arg_count; ++i)
+                argv[i + 1] = line->head->cmd.args[i];
+            argv[line->head->cmd.arg_count + 2] = NULL;
+            execvp(line->head->cmd.exe, argv);
             printf(" CHILD: command \"%s\" not found\n", line->head->cmd.exe);
+            free(argv);
             exit(1);
         default:
-            printf("PARENT: Это процесс-родитель!\n");
-            printf("PARENT: Мой PID -- %d\n", getpid());
-            printf("PARENT: PID моего потомка %d\n", pid);
-            printf("PARENT: Я жду, пока потомок не вызовет exit()...\n");
             wait(&pid);
-            int rv;
-            printf("PARENT: Код возврата потомка:%d\n", WEXITSTATUS(rv));
     }
 
 }

@@ -26,6 +26,8 @@ execute_command_line(const struct command_line *line)
     int pipe_inp;
     bool p_out_init;
     bool p_read_need = false;
+    bool and_check_status_need;
+    bool or_check_status_need;
     pid_t last_child_pid = 0;
     const struct expr *e = line->head;
     while (e != NULL) {
@@ -38,13 +40,29 @@ execute_command_line(const struct command_line *line)
             } else {
                 p_out_init = false;
             }
+            if (e->next != NULL && e->next->type == EXPR_TYPE_AND) {
+                and_check_status_need = true;
+            } else {
+                and_check_status_need = false;
+            }
+            if (e->next != NULL && e->next->type == EXPR_TYPE_OR) {
+                or_check_status_need = true;
+            } else {
+                or_check_status_need = false;
+            }
             if (strcmp(e->cmd.exe, "exit") == 0 && line->head->next == NULL) {
                 if (e->cmd.arg_count > 0)
                     exit(atoi(e->cmd.args[0]));
                 exit(EXIT_SUCCESS);
             } else if (strcmp(e->cmd.exe, "cd") == 0) {
                 if (e->cmd.arg_count > 0) {
-                    chdir(e->cmd.args[0]);
+                    int res = chdir(e->cmd.args[0]);
+                    if (res == -1) {
+                        if (and_check_status_need)
+                            break;
+                    } else if (or_check_status_need) {
+                        break;
+                    }
                 }
             } else {
                 switch(last_child_pid = fork()) {
@@ -84,6 +102,20 @@ execute_command_line(const struct command_line *line)
                         int status = execvp(e->cmd.exe, argv);
                         exit(status);
                 }
+                if (and_check_status_need || or_check_status_need) {
+                    int status;
+                    waitpid(last_child_pid, &status, 0);
+                    if (WIFEXITED(status)) {
+                        if (WEXITSTATUS(status)) {
+                            if (and_check_status_need)
+                                break;
+                        } else if (or_check_status_need)
+                            break;
+                    } else {
+                        if (and_check_status_need)
+                            break;
+                    }
+                }
             }
             if (p_read_need)
                 close(pipe_inp);
@@ -96,12 +128,14 @@ execute_command_line(const struct command_line *line)
         }
         e = e->next;
     }
-    int status;
-    waitpid(last_child_pid, &status, 0);
-    usleep(100 * 1000);  // Workaround for tests. They pass commands so frequently that system fails to create files
-                         // before they are accessed by next command
-    if (WIFEXITED(status))
-        return WEXITSTATUS(status);
+    if (last_child_pid != 0) {
+        int status;
+        waitpid(last_child_pid, &status, 0);
+        usleep(100 * 1000);  // Workaround for tests. They pass commands so frequently that system fails to create files
+                             // before they are accessed by next command
+        if (WIFEXITED(status))
+            return WEXITSTATUS(status);
+    }
     return EXIT_SUCCESS;
 }
 

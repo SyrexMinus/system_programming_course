@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 /**
  * You can compile and run this code using the commands:
@@ -17,72 +18,96 @@
  * $> ./main
  */
 
-static void
+static int
 execute_command_line(const struct command_line *line)
 {
-	/* REPLACE THIS CODE WITH ACTUAL COMMAND EXECUTION */
-
 	assert(line != NULL);
+    int p[2];
+    int pipe_inp;
+    bool p_out_init;
+    bool p_read_need = false;
+    pid_t last_child_pid = 0;
 	const struct expr *e = line->head;
 	while (e != NULL) {
 		if (e->type == EXPR_TYPE_COMMAND) {
-			if (strcmp(e->cmd.exe, "exit") == 0 && e->next == NULL && e->cmd.arg_count == 0) {
-                exit(0);
+            if (e->next != NULL && e->next->type == EXPR_TYPE_PIPE) {
+                if (pipe(p) < 0) {
+                    assert(false);
+                }
+                p_out_init = true;
+            } else {
+                p_out_init = false;
+            }
+			if (strcmp(e->cmd.exe, "exit") == 0 && line->head->next == NULL) {
+			    if (e->cmd.arg_count > 0)
+                    exit(atoi(e->cmd.args[0]));
+                exit(EXIT_SUCCESS);
 			} else if (strcmp(e->cmd.exe, "cd") == 0) {
-			    if (e->cmd.arg_count == 1) {
+			    if (e->cmd.arg_count > 0) {
                     chdir(e->cmd.args[0]);
-			    } else if (e->cmd.arg_count > 1) {
-                    printf("cd: too many arguments\n");
-			    }
-			}
-		} else if (e->type == EXPR_TYPE_PIPE) {
-			printf("\tPIPE\n");
-		} else if (e->type == EXPR_TYPE_AND) {
-			printf("\tAND\n");
-		} else if (e->type == EXPR_TYPE_OR) {
-			printf("\tOR\n");
-		} else {
-			assert(false);
+                }
+			} else {
+                switch(last_child_pid = fork()) {
+                    case -1:
+                        assert(false);
+                    case 0:
+                        if (p_read_need)
+                            dup2(pipe_inp, STDIN_FILENO);
+                        if (p_out_init) {
+                            close(p[0]);
+                            dup2(p[1], STDOUT_FILENO);
+                            dup2(p[1], STDERR_FILENO);
+                        }
+                        if (e->next == NULL) {
+                            if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
+                                int fd = open(line->out_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+                                dup2(fd, STDOUT_FILENO);
+                                dup2(fd, STDERR_FILENO);
+                                close(fd);
+                            } else if (line->out_type == OUTPUT_TYPE_FILE_APPEND) {
+                                int fd = open(line->out_file, O_WRONLY | (O_APPEND | O_CREAT), S_IRUSR | S_IWUSR);
+                                dup2(fd, STDOUT_FILENO);
+                                dup2(fd, STDERR_FILENO);
+                                close(fd);
+                            }
+                        }
+                        if (strcmp(e->cmd.exe, "exit") == 0) {
+                            if (e->cmd.arg_count > 0)
+                                exit(atoi(e->cmd.args[0]));
+                            exit(EXIT_SUCCESS);
+                        }
+                        char **argv = calloc(e->cmd.arg_count + 2, sizeof(argv));
+                        argv[0] = e->cmd.exe;
+                        for (uint32_t i = 0; i < e->cmd.arg_count; ++i)
+                            argv[i + 1] = e->cmd.args[i];
+                        argv[e->cmd.arg_count + 2] = NULL;
+                        int status = execvp(e->cmd.exe, argv);
+                        exit(status);
+                }
+            }
+            if (p_read_need)
+                close(pipe_inp);
+            if (p_out_init) {
+                close(p[1]);
+                p_read_need = true;
+                pipe_inp = p[0];
+            } else
+                p_read_need = false;
 		}
 		e = e->next;
 	}
-
-	// reference: https://www.opennet.ru/docs/RUS/linux_parallel/node7.html
-    pid_t pid;
-    switch(pid=fork()) {
-        case -1:
-            perror("fork");
-            exit(1);
-        case 0:
-            if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
-                int fd = open(line->out_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-                dup2(fd, STDOUT_FILENO);
-                dup2(fd, STDERR_FILENO);
-                close(fd);
-            } else if (line->out_type == OUTPUT_TYPE_FILE_APPEND) {
-                int fd = open(line->out_file, O_WRONLY | (O_APPEND | O_CREAT), S_IRUSR | S_IWUSR);
-                dup2(fd, STDOUT_FILENO);
-                dup2(fd, STDERR_FILENO);
-                close(fd);
-            }
-            char **argv = calloc(line->head->cmd.arg_count + 2, sizeof(argv));
-            argv[0] = line->head->cmd.exe;
-            for (uint32_t i = 0; i < line->head->cmd.arg_count; ++i)
-                argv[i + 1] = line->head->cmd.args[i];
-            argv[line->head->cmd.arg_count + 2] = NULL;
-            execvp(line->head->cmd.exe, argv);
-            printf(" CHILD: command \"%s\" not found\n", line->head->cmd.exe);
-            free(argv);
-            exit(1);
-        default:
-            wait(&pid);
-    }
-
+    int status;
+    waitpid(last_child_pid, &status, 0);
+    usleep(100 * 1000);
+    if (WIFEXITED(status))
+        return WEXITSTATUS(status);
+    return EXIT_SUCCESS;
 }
 
 int
 main(void)
 {
+    int status = 0;
 	const size_t buf_size = 1024;
 	char buf[buf_size];
 	int rc;
@@ -98,10 +123,10 @@ main(void)
 				printf("Error: %d\n", (int)err);
 				continue;
 			}
-			execute_command_line(line);
+            status = execute_command_line(line);
 			command_line_delete(line);
 		}
 	}
 	parser_delete(p);
-	return 0;
+    return status;
 }

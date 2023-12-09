@@ -21,15 +21,15 @@
 static int
 execute_command_line(const struct command_line *line)
 {
-	assert(line != NULL);
+    assert(line != NULL);
     int p[2];
     int pipe_inp;
     bool p_out_init;
     bool p_read_need = false;
     pid_t last_child_pid = 0;
-	const struct expr *e = line->head;
-	while (e != NULL) {
-		if (e->type == EXPR_TYPE_COMMAND) {
+    const struct expr *e = line->head;
+    while (e != NULL) {
+        if (e->type == EXPR_TYPE_COMMAND) {
             if (e->next != NULL && e->next->type == EXPR_TYPE_PIPE) {
                 if (pipe(p) < 0) {
                     assert(false);
@@ -38,15 +38,15 @@ execute_command_line(const struct command_line *line)
             } else {
                 p_out_init = false;
             }
-			if (strcmp(e->cmd.exe, "exit") == 0 && line->head->next == NULL) {
-			    if (e->cmd.arg_count > 0)
+            if (strcmp(e->cmd.exe, "exit") == 0 && line->head->next == NULL) {
+                if (e->cmd.arg_count > 0)
                     exit(atoi(e->cmd.args[0]));
                 exit(EXIT_SUCCESS);
-			} else if (strcmp(e->cmd.exe, "cd") == 0) {
-			    if (e->cmd.arg_count > 0) {
+            } else if (strcmp(e->cmd.exe, "cd") == 0) {
+                if (e->cmd.arg_count > 0) {
                     chdir(e->cmd.args[0]);
                 }
-			} else {
+            } else {
                 switch(last_child_pid = fork()) {
                     case -1:
                         assert(false);
@@ -93,9 +93,9 @@ execute_command_line(const struct command_line *line)
                 pipe_inp = p[0];
             } else
                 p_read_need = false;
-		}
-		e = e->next;
-	}
+        }
+        e = e->next;
+    }
     int status;
     waitpid(last_child_pid, &status, 0);
     usleep(100 * 1000);  // Workaround for tests. They pass commands so frequently that system fails to create files
@@ -109,25 +109,25 @@ int
 main(void)
 {
     int status = 0;
-	const size_t buf_size = 1024;
-	char buf[buf_size];
-	int rc;
-	struct parser *p = parser_new();
-	while ((rc = read(STDIN_FILENO, buf, buf_size)) > 0) {
-		parser_feed(p, buf, rc);
-		struct command_line *line = NULL;
-		while (true) {
-			enum parser_error err = parser_pop_next(p, &line);
-			if (err == PARSER_ERR_NONE && line == NULL)
-				break;
-			if (err != PARSER_ERR_NONE) {
-				printf("Error: %d\n", (int)err);
-				continue;
-			}
+    const size_t buf_size = 1024;
+    char buf[buf_size];
+    int rc;
+    struct parser *p = parser_new();
+    while ((rc = read(STDIN_FILENO, buf, buf_size)) > 0) {
+        parser_feed(p, buf, rc);
+        struct command_line *line = NULL;
+        while (true) {
+            enum parser_error err = parser_pop_next(p, &line);
+            if (err == PARSER_ERR_NONE && line == NULL)
+                break;
+            if (err != PARSER_ERR_NONE) {
+                printf("Error: %d\n", (int)err);
+                continue;
+            }
             status = execute_command_line(line);
-			command_line_delete(line);
-		}
-	}
-	parser_delete(p);
+            command_line_delete(line);
+        }
+    }
+    parser_delete(p);
     return status;
 }

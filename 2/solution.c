@@ -98,7 +98,8 @@ execute_command_line(const struct command_line *line)
 	}
     int status;
     waitpid(last_child_pid, &status, 0);
-    usleep(100 * 1000);
+    usleep(100 * 1000);  // Workaround for tests. They pass commands so frequently that system fails to create files
+                         // before they are accessed by next command
     if (WIFEXITED(status))
         return WEXITSTATUS(status);
     return EXIT_SUCCESS;

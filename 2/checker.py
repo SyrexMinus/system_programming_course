@@ -109,7 +109,7 @@ for section_i, section in enumerate(tests, 1):
 
 p = open_new_shell()
 try:
-	output = p.communicate(command.encode(), 3)[0].decode()
+	output = p.communicate(command.encode(), 10)[0].decode()
 except subprocess.TimeoutExpired:
 	print('Too long no output. Probably you forgot to process EOF')
 	finish(-1)

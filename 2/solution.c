@@ -26,12 +26,14 @@ execute_command_line(const struct command_line *line)
     int pipe_inp;
     bool p_out_init;
     bool p_read_need = false;
-    bool and_check_status_need;
-    bool or_check_status_need;
+    bool last_e_successed;
     pid_t last_child_pid = 0;
     const struct expr *e = line->head;
+    const struct expr *prev_or_and_e = NULL;
     while (e != NULL) {
-        if (e->type == EXPR_TYPE_COMMAND) {
+        if (e->type == EXPR_TYPE_COMMAND
+            && !(prev_or_and_e != NULL && ((prev_or_and_e->type == EXPR_TYPE_OR && last_e_successed)
+                                           || (prev_or_and_e->type == EXPR_TYPE_AND && !last_e_successed)))) {
             if (e->next != NULL && e->next->type == EXPR_TYPE_PIPE) {
                 if (pipe(p) < 0) {
                     assert(false);
@@ -40,16 +42,6 @@ execute_command_line(const struct command_line *line)
             } else {
                 p_out_init = false;
             }
-            if (e->next != NULL && e->next->type == EXPR_TYPE_AND) {
-                and_check_status_need = true;
-            } else {
-                and_check_status_need = false;
-            }
-            if (e->next != NULL && e->next->type == EXPR_TYPE_OR) {
-                or_check_status_need = true;
-            } else {
-                or_check_status_need = false;
-            }
             if (strcmp(e->cmd.exe, "exit") == 0 && line->head->next == NULL) {
                 if (e->cmd.arg_count > 0)
                     exit(atoi(e->cmd.args[0]));
@@ -57,64 +49,59 @@ execute_command_line(const struct command_line *line)
             } else if (strcmp(e->cmd.exe, "cd") == 0) {
                 if (e->cmd.arg_count > 0) {
                     int res = chdir(e->cmd.args[0]);
-                    if (res == -1) {
-                        if (and_check_status_need)
-                            break;
-                    } else if (or_check_status_need) {
-                        break;
-                    }
+                    if (res == -1)
+                        last_e_successed = false;
+                    else
+                        last_e_successed = true;
                 }
             } else {
-                switch(last_child_pid = fork()) {
-                    case -1:
-                        assert(false);
-                    case 0:
-                        if (p_read_need)
-                            dup2(pipe_inp, STDIN_FILENO);
-                        if (p_out_init) {
-                            close(p[0]);
-                            dup2(p[1], STDOUT_FILENO);
-                            dup2(p[1], STDERR_FILENO);
+                last_child_pid = fork();
+                if (last_child_pid == -1)
+                    assert(false);
+                else if (last_child_pid == 0) {
+                    if (p_read_need)
+                        dup2(pipe_inp, STDIN_FILENO);
+                    if (p_out_init) {
+                        close(p[0]);
+                        dup2(p[1], STDOUT_FILENO);
+                        dup2(p[1], STDERR_FILENO);
+                    }
+                    if (e->next == NULL) {
+                        if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
+                            int fd = open(line->out_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+                            dup2(fd, STDOUT_FILENO);
+                            dup2(fd, STDERR_FILENO);
+                            close(fd);
+                        } else if (line->out_type == OUTPUT_TYPE_FILE_APPEND) {
+                            int fd = open(line->out_file, O_WRONLY | (O_APPEND | O_CREAT), S_IRUSR | S_IWUSR);
+                            dup2(fd, STDOUT_FILENO);
+                            dup2(fd, STDERR_FILENO);
+                            close(fd);
                         }
-                        if (e->next == NULL) {
-                            if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
-                                int fd = open(line->out_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-                                dup2(fd, STDOUT_FILENO);
-                                dup2(fd, STDERR_FILENO);
-                                close(fd);
-                            } else if (line->out_type == OUTPUT_TYPE_FILE_APPEND) {
-                                int fd = open(line->out_file, O_WRONLY | (O_APPEND | O_CREAT), S_IRUSR | S_IWUSR);
-                                dup2(fd, STDOUT_FILENO);
-                                dup2(fd, STDERR_FILENO);
-                                close(fd);
-                            }
-                        }
-                        if (strcmp(e->cmd.exe, "exit") == 0) {
-                            if (e->cmd.arg_count > 0)
-                                exit(atoi(e->cmd.args[0]));
-                            exit(EXIT_SUCCESS);
-                        }
-                        char **argv = calloc(e->cmd.arg_count + 2, sizeof(argv));
-                        argv[0] = e->cmd.exe;
-                        for (uint32_t i = 0; i < e->cmd.arg_count; ++i)
-                            argv[i + 1] = e->cmd.args[i];
-                        argv[e->cmd.arg_count + 2] = NULL;
-                        int status = execvp(e->cmd.exe, argv);
-                        exit(status);
+                    }
+                    if (strcmp(e->cmd.exe, "exit") == 0) {
+                        if (e->cmd.arg_count > 0)
+                            exit(atoi(e->cmd.args[0]));
+                        exit(EXIT_SUCCESS);
+                    }
+                    char **argv = calloc(e->cmd.arg_count + 2, sizeof(argv));
+                    argv[0] = e->cmd.exe;
+                    for (uint32_t i = 0; i < e->cmd.arg_count; ++i)
+                        argv[i + 1] = e->cmd.args[i];
+                    argv[e->cmd.arg_count + 2] = NULL;
+                    int status = execvp(e->cmd.exe, argv);
+                    exit(status);
                 }
-                if (and_check_status_need || or_check_status_need) {
+                if (e->next != NULL && (e->next->type == EXPR_TYPE_OR || e->next->type == EXPR_TYPE_AND)) {
                     int status;
                     waitpid(last_child_pid, &status, 0);
                     if (WIFEXITED(status)) {
-                        if (WEXITSTATUS(status)) {
-                            if (and_check_status_need)
-                                break;
-                        } else if (or_check_status_need)
-                            break;
-                    } else {
-                        if (and_check_status_need)
-                            break;
-                    }
+                        if (WEXITSTATUS(status))
+                            last_e_successed = false;
+                        else
+                            last_e_successed = true;
+                    } else
+                        last_e_successed = false;
                 }
             }
             if (p_read_need)
@@ -126,6 +113,8 @@ execute_command_line(const struct command_line *line)
             } else
                 p_read_need = false;
         }
+        if (e->type == EXPR_TYPE_OR || e->type == EXPR_TYPE_AND)
+            prev_or_and_e = e;
         e = e->next;
     }
     if (last_child_pid != 0) {

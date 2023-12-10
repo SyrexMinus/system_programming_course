@@ -22,6 +22,13 @@ static int
 execute_command_line(const struct command_line *line)
 {
     assert(line != NULL);
+    if (line->is_background) {
+        pid_t pid = fork();
+        if (pid == -1)
+            assert(false);
+        if (pid > 0)
+            return EXIT_SUCCESS;
+    }
     int p[2];
     int pipe_inp;
     bool p_out_init;
@@ -122,10 +129,17 @@ execute_command_line(const struct command_line *line)
         waitpid(last_child_pid, &status, 0);
         usleep(100 * 1000);  // Workaround for tests. They pass commands so frequently that system fails to create files
                              // before they are accessed by next command
-        if (WIFEXITED(status))
-            return WEXITSTATUS(status);
+        if (WIFEXITED(status)) {
+            int ret_status = WEXITSTATUS(status);
+            if (line->is_background)
+                exit(ret_status);
+            return ret_status;
+        }
     }
-    return EXIT_SUCCESS;
+    int ret_status = EXIT_SUCCESS;
+    if (line->is_background)
+        exit(ret_status);
+    return ret_status;
 }
 
 int

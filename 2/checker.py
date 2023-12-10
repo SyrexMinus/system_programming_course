@@ -5,80 +5,80 @@ import os
 
 parser = argparse.ArgumentParser(description='Tests for shell')
 parser.add_argument('-e', type=str, default='./a.out',
-	            help='executable shell file')
+					help='executable shell file')
 parser.add_argument('-r', type=str, help='result file')
 parser.add_argument('-t', action='store_true', default=False,
-		    help='run without checks')
+					help='run without checks')
 parser.add_argument('--max', type=int, choices=[15, 20, 25], default=15,
-		    help='max points number')
+					help='max points number')
 args = parser.parse_args()
 
 tests = [
-[
-"mkdir testdir",
-"cd testdir",
-'pwd | tail -c 8',
-'   pwd | tail -c 8',
-'echo \"a\n\n\n\nb\" | cat -s',
-],
-[
-"touch \"my file with whitespaces in name.txt\"",
-"ls",
-"echo '123 456 \" str \"'",
-"echo '123 456 \" str \"' > \"my file with whitespaces in name.txt\"",
-"cat my\\ file\\ with\\ whitespaces\\ in\\ name.txt",
-"echo \"test\" >> \"my file with whitespaces in name.txt\"",
-"cat \"my file with whitespaces in name.txt\"",
-"echo 'truncate' > \"my file with whitespaces in name.txt\"",
-"cat \"my file with whitespaces in name.txt\"",
-"echo \"test 'test'' \\\\\" >> \"my file with whitespaces in name.txt\"",
-"cat \"my file with whitespaces in name.txt\"",
-"echo \"4\">file",
-"cat file",
-"echo 100|grep 100",
-],
-[
-"# Comment",
-"echo 123\\\n456",
-],
-[
-"rm my\\ file\\ with\\ whitespaces\\ in\\ name.txt",
-"echo 123 | grep 2",
-"echo 123\\\n456\\\n| grep 2",
-"echo \"123\n456\n7\n\" | grep 4",
-"echo 'source string' | sed 's/source/destination/g'",
-"echo 'source string' | sed 's/source/destination/g' | sed 's/string/value/g'",
-"echo 'source string' |\\\nsed 's/source/destination/g'\\\n| sed 's/string/value/g'",
-"echo 'test' | exit 123 | grep 'test2'",
-"echo 'source string' | sed 's/source/destination/g' | sed 's/string/value/g' > result.txt",
-"cat result.txt",
-"yes bigdata | head -n 100000 | wc -l | tr -d [:blank:]",
-"exit 123 | echo 100",
-"echo 100 | exit 123",
-"printf \"import time\\n\\\n"\
-	"time.sleep(0.1)\\n\\\n"\
-	"f = open('test.txt', 'w')\\n\\\n"\
-	"f.write('Text\\\\\\n')\\n\\\n"\
-	"f.close()\\n\" > test.py",
-"python test.py | exit 0",
-"cat test.txt",
-],
-[
-"false && echo 123",
-"true && echo 123",
-"true || false && echo 123",
-"true || false || true && echo 123",
-"false || echo 123",
-"echo 100 || echo 200",
-"echo 100 && echo 200",
-"echo 100 | grep 1 || echo 200 | grep 2",
-"echo 100 | grep 1 && echo 200 | grep 2",
-],
-[
-"sleep 0.5 && echo 'back sleep is done' &",
-"echo 'next sleep is done'",
-"sleep 0.5",
-]
+	[
+		"mkdir testdir",
+		"cd testdir",
+		'pwd | tail -c 8',
+		'   pwd | tail -c 8',
+		'echo \"a\n\n\n\nb\" | cat -s',
+	],
+	[
+		"touch \"my file with whitespaces in name.txt\"",
+		"ls",
+		"echo '123 456 \" str \"'",
+		"echo '123 456 \" str \"' > \"my file with whitespaces in name.txt\"",
+		"cat my\\ file\\ with\\ whitespaces\\ in\\ name.txt",
+		"echo \"test\" >> \"my file with whitespaces in name.txt\"",
+		"cat \"my file with whitespaces in name.txt\"",
+		"echo 'truncate' > \"my file with whitespaces in name.txt\"",
+		"cat \"my file with whitespaces in name.txt\"",
+		"echo \"test 'test'' \\\\\" >> \"my file with whitespaces in name.txt\"",
+		"cat \"my file with whitespaces in name.txt\"",
+		"echo \"4\">file",
+		"cat file",
+		"echo 100|grep 100",
+	],
+	[
+		"# Comment",
+		"echo 123\\\n456",
+	],
+	[
+		"rm my\\ file\\ with\\ whitespaces\\ in\\ name.txt",
+		"echo 123 | grep 2",
+		"echo 123\\\n456\\\n| grep 2",
+		"echo \"123\n456\n7\n\" | grep 4",
+		"echo 'source string' | sed 's/source/destination/g'",
+		"echo 'source string' | sed 's/source/destination/g' | sed 's/string/value/g'",
+		"echo 'source string' |\\\nsed 's/source/destination/g'\\\n| sed 's/string/value/g'",
+		"echo 'test' | exit 123 | grep 'test2'",
+		"echo 'source string' | sed 's/source/destination/g' | sed 's/string/value/g' > result.txt",
+		"cat result.txt",
+		"yes bigdata | head -n 100000 | wc -l | tr -d [:blank:]",
+		"exit 123 | echo 100",
+		"echo 100 | exit 123",
+		"printf \"import time\\n\\\n" \
+		"time.sleep(0.1)\\n\\\n" \
+		"f = open('test.txt', 'w')\\n\\\n" \
+		"f.write('Text\\\\\\n')\\n\\\n" \
+		"f.close()\\n\" > test.py",
+		"python test.py | exit 0",
+		"cat test.txt",
+	],
+	[
+		"false && echo 123",
+		"true && echo 123",
+		"true || false && echo 123",
+		"true || false || true && echo 123",
+		"false || echo 123",
+		"echo 100 || echo 200",
+		"echo 100 && echo 200",
+		"echo 100 | grep 1 || echo 200 | grep 2",
+		"echo 100 | grep 1 && echo 200 | grep 2",
+	],
+	[
+		"sleep 0.5 && echo 'back sleep is done' &",
+		"echo 'next sleep is done'",
+		"sleep 0.5",
+	]
 ]
 
 prefix = '--------------------------------'
@@ -89,8 +89,8 @@ def finish(code):
 
 def open_new_shell():
 	return subprocess.Popen([args.e], shell=False, stdin=subprocess.PIPE,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.STDOUT, bufsize=0)
+							stdout=subprocess.PIPE,
+							stderr=subprocess.STDOUT, bufsize=0)
 
 def exit_failure():
 	print('{}\nThe tests did not pass'.format(prefix))
@@ -109,7 +109,7 @@ for section_i, section in enumerate(tests, 1):
 
 p = open_new_shell()
 try:
-	output = p.communicate(command.encode(), 15)[0].decode()
+	output = p.communicate(command.encode(), 3)[0].decode()
 except subprocess.TimeoutExpired:
 	print('Too long no output. Probably you forgot to process EOF')
 	finish(-1)
@@ -134,13 +134,13 @@ is_error = False
 for i in range(line_count):
 	print(output[i])
 	if output[i] != etalon[i]:
-		print('Error in line {}. '\
-		      'Expected:\n{}'.format(i + 1, etalon[i]))
+		print('Error in line {}. ' \
+			  'Expected:\n{}'.format(i + 1, etalon[i]))
 		is_error = True
 		break
 if not is_error and etalon_len != output_len:
-	print('Different line count. Got {}, '\
-	      'expected {}'.format(output_len, etalon_len))
+	print('Different line count. Got {}, ' \
+		  'expected {}'.format(output_len, etalon_len))
 	is_error = True
 p.terminate()
 if is_error:
@@ -149,9 +149,9 @@ if is_error:
 # Explicitly test the 'exit' command. It is expected to terminate the shell,
 # hence tested separately.
 tests = [
-("exit", 0),
-("  exit ", 0),
-("  exit   10  ", 10),
+	("exit", 0),
+	("  exit ", 0),
+	("  exit   10  ", 10),
 ]
 for test in tests:
 	p = open_new_shell()
@@ -159,8 +159,8 @@ for test in tests:
 		p.stdin.write(test[0].encode() + b'\n')
 		p.wait(1)
 	except subprocess.TimeoutExpired:
-		print('Too long no output. Probably you forgot to '\
-		      'handle "exit" manually')
+		print('Too long no output. Probably you forgot to ' \
+			  'handle "exit" manually')
 		finish(-1)
 	p.terminate()
 	if p.returncode != test[1]:
@@ -170,9 +170,9 @@ for test in tests:
 
 # Exit code should be from the last used command.
 tests = [
-(["ls /"], 0),
-(["ls / | exit 123"], 123),
-(["ls /404", "echo test"], 0),
+	(["ls /"], 0),
+	(["ls / | exit 123"], 123),
+	(["ls /404", "echo test"], 0),
 ]
 cmd = "ls /404"
 code = os.WEXITSTATUS(os.system(cmd + ' 2>/dev/null'))
@@ -187,8 +187,8 @@ for test in tests:
 		p.stdin.close()
 		p.wait(1)
 	except subprocess.TimeoutExpired:
-		print('Too long no output. Probably you forgot to '\
-		      'handle "exit" manually')
+		print('Too long no output. Probably you forgot to ' \
+			  'handle "exit" manually')
 		finish(-1)
 	p.terminate()
 	if p.returncode != test[1]:
@@ -216,8 +216,8 @@ if not is_error and p.returncode != 0:
 	print('Bad return code for an extra big command - expected 0 (success)')
 	is_error = True
 if is_error:
-	print('Failed an extra big command (`echo a....` with `a` '\
-	      'repeated {} times'.format(count))
+	print('Failed an extra big command (`echo a....` with `a` ' \
+		  'repeated {} times'.format(count))
 	exit_failure()
 
 # Test extra many args. To ensure the shell doesn't have an internal argument
@@ -236,12 +236,12 @@ if not is_error and output != output_expected:
 	print('Bad output for a command with extra many args')
 	is_error = True
 if not is_error and p.returncode != 0:
-	print('Bad return code for a command with extra many args - '\
-	      'expected 0 (success)')
+	print('Bad return code for a command with extra many args - ' \
+		  'expected 0 (success)')
 	is_error = True
 if is_error:
-	print('Failed a command with extra many args (`echo a a a ...` with '\
-	      '`a` repeated {} times'.format(count))
+	print('Failed a command with extra many args (`echo a a a ...` with ' \
+		  '`a` repeated {} times'.format(count))
 	exit_failure()
 
 # Test an extra long pipe. To ensure that the shell doesn't have a limit on the
@@ -261,13 +261,13 @@ if not is_error and output != output_expected:
 	print('Bad output for a command with an extra long pipe')
 	is_error = True
 if not is_error and p.returncode != 0:
-	print('Bad return code for a command with an extra long pipe - '\
-	      'expected 0 (success)')
+	print('Bad return code for a command with an extra long pipe - ' \
+		  'expected 0 (success)')
 	is_error = True
 if is_error:
-	print('Failed a command with an extra long pipe '\
-	      '(`echo test | cat | cat | cat ... | cat` with '\
-	      '`cat` repeated {} times'.format(count))
+	print('Failed a command with an extra long pipe ' \
+		  '(`echo test | cat | cat | cat ... | cat` with ' \
+		  '`cat` repeated {} times'.format(count))
 	exit_failure()
 
 print('{}\nThe tests passed'.format(prefix))

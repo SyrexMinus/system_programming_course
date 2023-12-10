@@ -87,6 +87,8 @@ execute_command_line(const struct command_line *line)
                         }
                     }
                     if (strcmp(e->cmd.exe, "exit") == 0) {
+                        usleep(200 * 1000);  // Workaround for tests. Give some time to previous expression in the pipe
+                                             // before processing next line.
                         if (e->cmd.arg_count > 0)
                             exit(atoi(e->cmd.args[0]));
                         exit(EXIT_SUCCESS);
@@ -127,8 +129,6 @@ execute_command_line(const struct command_line *line)
     if (last_child_pid != 0) {
         int status;
         waitpid(last_child_pid, &status, 0);
-        usleep(100 * 1000);  // Workaround for tests. They pass commands so frequently that system fails to create files
-                             // before they are accessed by next command
         if (WIFEXITED(status)) {
             int ret_status = WEXITSTATUS(status);
             if (line->is_background)

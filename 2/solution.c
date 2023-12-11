@@ -15,11 +15,19 @@
  * You can compile and run this code using the commands:
  *
  * $> gcc -Wextra -Werror -Wall -Wno-gnu-folding-constant solution.c parser.c -o a.out
- * $> ./main
+ * $> ./a.out
  */
 
+static void
+command_exit(int status, struct parser *parser, struct command_line *line)
+{
+    command_line_delete(line);
+    parser_delete(parser);
+    exit(status);
+}
+
 static int
-execute_command_line(const struct command_line *line)
+execute_command_line(struct command_line *line, struct parser *parser)
 {
     assert(line != NULL);
     if (line->is_background) {
@@ -51,8 +59,8 @@ execute_command_line(const struct command_line *line)
             }
             if (strcmp(e->cmd.exe, "exit") == 0 && line->head->next == NULL) {
                 if (e->cmd.arg_count > 0)
-                    exit(atoi(e->cmd.args[0]));
-                exit(EXIT_SUCCESS);
+                    command_exit(atoi(e->cmd.args[0]), parser, line);
+                command_exit(EXIT_SUCCESS, parser, line);
             } else if (strcmp(e->cmd.exe, "cd") == 0) {
                 if (e->cmd.arg_count > 0) {
                     int res = chdir(e->cmd.args[0]);
@@ -90,8 +98,8 @@ execute_command_line(const struct command_line *line)
                         usleep(200 * 1000);  // Workaround for tests. Give some time to previous expression in the pipe
                                              // before processing next line.
                         if (e->cmd.arg_count > 0)
-                            exit(atoi(e->cmd.args[0]));
-                        exit(EXIT_SUCCESS);
+                            command_exit(atoi(e->cmd.args[0]), parser, line);
+                        command_exit(EXIT_SUCCESS, parser, line);
                     }
                     char **argv = calloc(e->cmd.arg_count + 2, sizeof(argv));
                     argv[0] = e->cmd.exe;
@@ -99,7 +107,7 @@ execute_command_line(const struct command_line *line)
                         argv[i + 1] = e->cmd.args[i];
                     argv[e->cmd.arg_count + 2] = NULL;
                     int status = execvp(e->cmd.exe, argv);
-                    exit(status);
+                    command_exit(status, parser, line);
                 }
                 if (e->next != NULL && (e->next->type == EXPR_TYPE_OR || e->next->type == EXPR_TYPE_AND)) {
                     int status;
@@ -132,13 +140,13 @@ execute_command_line(const struct command_line *line)
         if (WIFEXITED(status)) {
             int ret_status = WEXITSTATUS(status);
             if (line->is_background)
-                exit(ret_status);
+                command_exit(ret_status, parser, line);
             return ret_status;
         }
     }
     int ret_status = EXIT_SUCCESS;
     if (line->is_background)
-        exit(ret_status);
+        command_exit(ret_status, parser, line);
     return ret_status;
 }
 
@@ -161,7 +169,7 @@ main(void)
                 printf("Error: %d\n", (int)err);
                 continue;
             }
-            status = execute_command_line(line);
+            status = execute_command_line(line, p);
             command_line_delete(line);
         }
     }

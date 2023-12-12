@@ -47,7 +47,7 @@
 #define SIG_NUM 1000000LL
 
 pthread_mutex_t mutex;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;  // todo properly init (google it)
+pthread_cond_t cond;
 volatile int is_complete;
 
 void* signaling(void *args) {

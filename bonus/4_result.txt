@@ -1,4 +1,4 @@
 Benchmark statistics are calculated over 10 runs. Each run is 100000 create+join.
-min duration: 22820 ns per create+join
-max duration: 33868 ns per create+join
-median duration: 25082 ns per create+join
+min duration: 22824 ns per create+join
+max duration: 25844 ns per create+join
+median duration: 23022 ns per create+join

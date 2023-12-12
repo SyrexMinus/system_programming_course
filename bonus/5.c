@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <time.h>
-#include "limits.h"
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdlib.h>
+#include "limits.h"
 
 /**
  * You can compile and run this code using the commands:
@@ -43,9 +44,23 @@
 #define RUNS_NUM 10LL
 #define INC_NUM 100000000LL
 
+// reference https://stackoverflow.com/questions/1961173/median-function-in-c-math-library
+int
+compare(const void *a, const void *b)
+{
+    long long res = *(unsigned long long *)a - *(unsigned long long *)b;
+    if (res < 0)
+        return -1;
+    else if (res > 0)
+        return 1;
+    return 0;
+}
+
 volatile int counter;
 
-void* counter_inc(void *args) {
+void *
+counter_inc(void *args)
+{
     int order = *((int *)args);
     while (1) {
         if (counter >= INC_NUM) {
@@ -55,11 +70,13 @@ void* counter_inc(void *args) {
     }
 }
 
-void run_atomic_increment_benchmark(unsigned long long thread_num, int order, const char *order_name) {
+void
+run_atomic_increment_benchmark(unsigned long long thread_num, int order, const char *order_name)
+{
     struct timespec start, end;
     unsigned long long max_dur_ns = 0;
     unsigned long long min_dur_ns = ULLONG_MAX;
-    unsigned long long med_dur_ns = 0;
+    unsigned long long dur_nss[RUNS_NUM];
     for (unsigned long long run = 0; run < RUNS_NUM; ++run) {
         pthread_t threads[thread_num];
         counter = 0;
@@ -75,11 +92,12 @@ void run_atomic_increment_benchmark(unsigned long long thread_num, int order, co
             max_dur_ns = dur_ns;
         if (dur_ns < min_dur_ns)
             min_dur_ns = dur_ns;
-        med_dur_ns += dur_ns;
+        dur_nss[run] = dur_ns;
     }
     double max_dur_s = (double) max_dur_ns / 1000000000;
     double min_dur_s = (double) min_dur_ns / 1000000000;
-    double med_dur_s = (double) med_dur_ns / RUNS_NUM / 1000000000;
+    qsort(dur_nss, RUNS_NUM, sizeof(unsigned long long), compare);
+    double med_dur_s = (double) dur_nss[RUNS_NUM/2] / 1000000000;
     printf("(%lld threads with %s order) min duration: %lf sec\n",
            thread_num, order_name, min_dur_s);
     printf("(%lld threads with %s order) max duration: %lf sec\n",
@@ -88,7 +106,9 @@ void run_atomic_increment_benchmark(unsigned long long thread_num, int order, co
            thread_num, order_name, med_dur_s);
 }
 
-int main() {
+int
+main()
+{
     printf("Benchmark statistics are calculated over %lld runs. Each run is %lld increments in total.\n",
            RUNS_NUM, INC_NUM);
     run_atomic_increment_benchmark(1, __ATOMIC_RELAXED, "relaxed");

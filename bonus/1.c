@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 #include "limits.h"
 
 /**
@@ -35,11 +36,25 @@
 #define RUNS_NUM 10LL
 #define CALLS_NUM 50000000LL
 
-void run_clock_gettime_benchmark(clockid_t clock_id, const char *clock_name) {
+// reference https://stackoverflow.com/questions/1961173/median-function-in-c-math-library
+int
+compare(const void *a, const void *b)
+{
+    long long res = *(unsigned long long *)a - *(unsigned long long *)b;
+    if (res < 0)
+        return -1;
+    else if (res > 0)
+        return 1;
+    return 0;
+}
+
+void
+run_clock_gettime_benchmark(clockid_t clock_id, const char *clock_name)
+{
     struct timespec start, end, tmp;
     unsigned long long max_dur_ns = 0;
     unsigned long long min_dur_ns = ULLONG_MAX;
-    unsigned long long med_dur_ns = 0;
+    unsigned long long dur_nss[RUNS_NUM];
     for (unsigned long long run = 0; run < RUNS_NUM; ++run) {
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (unsigned long long i = 0; i < CALLS_NUM; ++i)
@@ -51,17 +66,20 @@ void run_clock_gettime_benchmark(clockid_t clock_id, const char *clock_name) {
             max_dur_ns = dur_ns;
         if (dur_ns < min_dur_ns)
             min_dur_ns = dur_ns;
-        med_dur_ns += dur_ns;
+        dur_nss[run] = dur_ns;
     }
     min_dur_ns /= CALLS_NUM;
     max_dur_ns /= CALLS_NUM;
-    med_dur_ns /= RUNS_NUM * CALLS_NUM;
+    qsort(dur_nss, RUNS_NUM, sizeof(unsigned long long), compare);
+    unsigned long long med_dur_ns = dur_nss[RUNS_NUM/2] / CALLS_NUM;
     printf("%s min duration: %lld ns per call\n", clock_name, min_dur_ns);
     printf("%s max duration: %lld ns per call\n", clock_name, max_dur_ns);
     printf("%s median duration: %lld ns per call\n", clock_name, med_dur_ns);
 }
 
-int main() {
+int
+main()
+{
     printf("Benchmark statistics are calculated over %lld runs. Each run is %lld calls.\n", RUNS_NUM, CALLS_NUM);
     run_clock_gettime_benchmark(CLOCK_REALTIME, "CLOCK_REALTIME");
     run_clock_gettime_benchmark(CLOCK_MONOTONIC, "CLOCK_MONOTONIC");

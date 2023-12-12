@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <time.h>
-#include "limits.h"
+#include <stdlib.h>
 #include <pthread.h>
+#include "limits.h"
 
 /**
  * You can compile and run this code using the commands:
@@ -37,16 +38,32 @@
 #define RUNS_NUM 10LL
 #define CJ_PAIR_NUM 100000LL
 
-void* dummy(void *args) {
+// reference https://stackoverflow.com/questions/1961173/median-function-in-c-math-library
+int
+compare(const void *a, const void *b)
+{
+    long long res = *(unsigned long long *)a - *(unsigned long long *)b;
+    if (res < 0)
+        return -1;
+    else if (res > 0)
+        return 1;
+    return 0;
+}
+
+void *
+dummy(void *args)
+{
     (void)args;
     return NULL;
 }
 
-void run_pthread_create_join_benchmark() {
+void
+run_pthread_create_join_benchmark()
+{
     struct timespec start, end;
     unsigned long long max_dur_ns = 0;
     unsigned long long min_dur_ns = ULLONG_MAX;
-    unsigned long long med_dur_ns = 0;
+    unsigned long long dur_nss[RUNS_NUM];
     for (unsigned long long run = 0; run < RUNS_NUM; ++run) {
         pthread_t thread;
         clock_gettime(CLOCK_MONOTONIC, &start);
@@ -61,17 +78,20 @@ void run_pthread_create_join_benchmark() {
             max_dur_ns = dur_ns;
         if (dur_ns < min_dur_ns)
             min_dur_ns = dur_ns;
-        med_dur_ns += dur_ns;
+        dur_nss[run] = dur_ns;
     }
     min_dur_ns /= CJ_PAIR_NUM;
     max_dur_ns /= CJ_PAIR_NUM;
-    med_dur_ns /= RUNS_NUM * CJ_PAIR_NUM;
+    qsort(dur_nss, RUNS_NUM, sizeof(unsigned long long), compare);
+    unsigned long long med_dur_ns = dur_nss[RUNS_NUM/2] / CJ_PAIR_NUM;
     printf("min duration: %lld ns per create+join\n", min_dur_ns);
     printf("max duration: %lld ns per create+join\n", max_dur_ns);
     printf("median duration: %lld ns per create+join\n", med_dur_ns);
 }
 
-int main() {
+int
+main()
+{
     printf("Benchmark statistics are calculated over %lld runs. Each run is %lld create+join.\n",
            RUNS_NUM, CJ_PAIR_NUM);
     run_pthread_create_join_benchmark();

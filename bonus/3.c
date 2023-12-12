@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <time.h>
-#include "limits.h"
+#include <stdlib.h>
 #include <pthread.h>
+#include "limits.h"
 
 /**
  * You can compile and run this code using the commands:
@@ -45,7 +46,21 @@
 pthread_mutex_t mutex;
 volatile int counter;  // global atomic counter
 
-void* counter_inc(void *args) {
+// reference https://stackoverflow.com/questions/1961173/median-function-in-c-math-library
+int
+compare(const void *a, const void *b)
+{
+    long long res = *(unsigned long long *)a - *(unsigned long long *)b;
+    if (res < 0)
+        return -1;
+    else if (res > 0)
+        return 1;
+    return 0;
+}
+
+void *
+counter_inc(void *args)
+{
     (void)args;
     while (1) {
         pthread_mutex_lock(&mutex);
@@ -61,11 +76,13 @@ void* counter_inc(void *args) {
     }
 }
 
-void run_pthread_mutex_lock_benchmark(unsigned long long thread_num) {
+void
+run_pthread_mutex_lock_benchmark(unsigned long long thread_num)
+{
     struct timespec start, end;
     unsigned long long max_dur_ns = 0;
     unsigned long long min_dur_ns = ULLONG_MAX;
-    unsigned long long med_dur_ns = 0;
+    unsigned long long dur_nss[RUNS_NUM];
     for (unsigned long long run = 0; run < RUNS_NUM; ++run) {
         pthread_t threads[thread_num];
         counter = 0;
@@ -83,17 +100,20 @@ void run_pthread_mutex_lock_benchmark(unsigned long long thread_num) {
             max_dur_ns = dur_ns;
         if (dur_ns < min_dur_ns)
             min_dur_ns = dur_ns;
-        med_dur_ns += dur_ns;
+        dur_nss[run] = dur_ns;
     }
     min_dur_ns /= LOCKS_NUM;
     max_dur_ns /= LOCKS_NUM;
-    med_dur_ns /= RUNS_NUM * LOCKS_NUM;
+    qsort(dur_nss, RUNS_NUM, sizeof(unsigned long long), compare);
+    unsigned long long med_dur_ns = dur_nss[RUNS_NUM/2] / LOCKS_NUM;
     printf("(%lld threads) min duration: %lld ns per lock/unlock pair\n", thread_num, min_dur_ns);
     printf("(%lld threads) max duration: %lld ns per lock/unlock pair\n", thread_num, max_dur_ns);
     printf("(%lld threads) median duration: %lld ns per lock/unlock pair\n", thread_num, med_dur_ns);
 }
 
-int main() {
+int
+main()
+{
     printf("Benchmark statistics are calculated over %lld runs. Each run is %lld locks in total.\n",
            RUNS_NUM, LOCKS_NUM);
     run_pthread_mutex_lock_benchmark(1);

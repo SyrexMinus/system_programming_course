@@ -1,0 +1,10 @@
+Benchmark statistics are calculated over 10 runs. Each run is 100000000 increments in total.
+(1 threads with relaxed order) min duration: 0.868895 sec
+(1 threads with relaxed order) max duration: 1.227640 sec
+(1 threads with relaxed order) median duration: 0.981301 sec
+(3 threads with relaxed order) min duration: 2.145996 sec
+(3 threads with relaxed order) max duration: 2.187311 sec
+(3 threads with relaxed order) median duration: 2.159470 sec
+(3 threads with sequentially consistent order) min duration: 2.178175 sec
+(3 threads with sequentially consistent order) max duration: 2.195460 sec
+(3 threads with sequentially consistent order) median duration: 2.184561 sec

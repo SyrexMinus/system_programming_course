@@ -1,0 +1,16 @@
+Benchmark statistics are calculated over 10 runs. Each run is 10000000 locks in total.
+(1 threads) min duration: 17 ns per lock/unlock pair
+(1 threads) max duration: 23 ns per lock/unlock pair
+(1 threads) median duration: 19 ns per lock/unlock pair
+(2 threads) min duration: 38 ns per lock/unlock pair
+(2 threads) max duration: 50 ns per lock/unlock pair
+(2 threads) median duration: 45 ns per lock/unlock pair
+(3 threads) min duration: 58 ns per lock/unlock pair
+(3 threads) max duration: 61 ns per lock/unlock pair
+(3 threads) median duration: 59 ns per lock/unlock pair
+(4 threads) min duration: 42 ns per lock/unlock pair
+(4 threads) max duration: 45 ns per lock/unlock pair
+(4 threads) median duration: 43 ns per lock/unlock pair
+(5 threads) min duration: 57 ns per lock/unlock pair
+(5 threads) max duration: 58 ns per lock/unlock pair
+(5 threads) median duration: 57 ns per lock/unlock pair

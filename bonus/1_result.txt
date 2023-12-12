@@ -1,0 +1,10 @@
+Benchmark statistics are calculated over 10 runs. Each run is 50000000 calls.
+CLOCK_REALTIME min duration: 25 ns per call
+CLOCK_REALTIME max duration: 26 ns per call
+CLOCK_REALTIME median duration: 25 ns per call
+CLOCK_MONOTONIC min duration: 67 ns per call
+CLOCK_MONOTONIC max duration: 80 ns per call
+CLOCK_MONOTONIC median duration: 71 ns per call
+CLOCK_MONOTONIC_RAW min duration: 37 ns per call
+CLOCK_MONOTONIC_RAW max duration: 38 ns per call
+CLOCK_MONOTONIC_RAW median duration: 37 ns per call

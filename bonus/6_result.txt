@@ -1,0 +1,13 @@
+Benchmark statistics are calculated over 10 runs. Each run is 1000000 signals in total.
+(signal()s with 1 wait-threads) min duration: 0.053440 sec
+(signal()s with 1 wait-threads) max duration: 0.065495 sec
+(signal()s with 1 wait-threads) median duration: 0.058206 sec
+(broadcast()s with 1 wait-threads) min duration: 0.046531 sec
+(broadcast()s with 1 wait-threads) max duration: 0.067417 sec
+(broadcast()s with 1 wait-threads) median duration: 0.062748 sec
+(signal()s with 3 wait-threads) min duration: 0.330727 sec
+(signal()s with 3 wait-threads) max duration: 0.662921 sec
+(signal()s with 3 wait-threads) median duration: 0.584808 sec
+(broadcast()s with 3 wait-threads) min duration: 0.106824 sec
+(broadcast()s with 3 wait-threads) max duration: 0.328027 sec
+(broadcast()s with 3 wait-threads) median duration: 0.270650 sec

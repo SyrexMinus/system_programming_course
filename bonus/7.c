@@ -61,7 +61,6 @@
 struct thread_args {
     unsigned long long i;
     uint64_t *arr;
-    unsigned long long inc_num;
 };
 
 // reference https://stackoverflow.com/questions/1961173/median-function-in-c-math-library
@@ -81,10 +80,9 @@ counter_inc(void *args)
 {
     struct thread_args args_ = *((struct thread_args *)args);
     unsigned long long i = args_.i;
-    uint64_t *arr = args_.arr;
-    unsigned long long inc_num = args_.inc_num;
-    volatile int v_true = 1;
-    for (; arr[i] < inc_num && v_true; ++arr[i]);
+    volatile uint64_t *arr = args_.arr;
+    for (volatile int j = 0; j < INC_NUM; ++j)
+        ++arr[i];
     return NULL;
 }
 
@@ -100,13 +98,12 @@ run_false_sharing_benchmark(unsigned long long thread_num, int dist, const char 
         for (unsigned long long i = 0; i < thread_num * dist; i++)
             arr[i] = 0;
         pthread_t threads[thread_num];
+        struct thread_args args[thread_num];
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (unsigned long long i = 0; i < thread_num; ++i) {
-            struct thread_args args;
-            args.i = i * dist;
-            args.arr = arr;
-            args.inc_num = INC_NUM / thread_num;
-            pthread_create(&threads[i], NULL, counter_inc, &args);
+            args[i].i = i * dist;
+            args[i].arr = arr;
+            pthread_create(&threads[i], NULL, counter_inc, &(args[i]));
         }
         for (unsigned long long i = 0; i < thread_num; ++i)
             pthread_join(threads[i], NULL);

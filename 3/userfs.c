@@ -4,6 +4,9 @@
 #include <string.h>
 #include <assert.h>
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+
 enum {
 	BLOCK_SIZE = 512,
 	MAX_FILE_SIZE = 1024 * 1024 * 100,
@@ -26,7 +29,7 @@ struct block {
 };
 
 struct file {
-	/** Double-linked list of file blocks. */
+	/** Double-linked list of file blocks. First block. */
 	struct block *block_list;
 	/**
 	 * Last block in the list above for fast access to the end
@@ -42,16 +45,17 @@ struct file {
 	struct file *prev;
 
 	/* PUT HERE OTHER MEMBERS */
+	/** number of blocks occupied to control file size. */
+	size_t blocks_num;
 };
 
-/** List of all files. */
+/** Double-linked list of all files. Last file. */
 static struct file *file_list = NULL;
 
 struct filedesc {
 	struct file *file;
 
 	/* PUT HERE OTHER MEMBERS */
-    int pos;  // todo refactor remove pos, return in filedesc new and delete use of pos
 };
 
 /**
@@ -71,13 +75,15 @@ ufs_errno()
 }
 
 static struct block *
-block_new(struct block *next, struct block *prev)
+block_new(struct block *prev)
 {
     struct block *b = (struct block *) malloc(sizeof(*b));
     b->memory = calloc(BLOCK_SIZE, sizeof(char));
     b->occupied = 0;
-    b->next = next;
+    if (prev != NULL)
+        prev->next = b;
     b->prev = prev;
+    b->next = NULL;
     return b;
 }
 
@@ -102,12 +108,11 @@ file_new(const char *name)
     f->refs = 0;
     f->name = strdup(name);
     f->next = NULL;
-    f->prev = NULL;
-    if (file_list != NULL) {
+    if (file_list != NULL)
         file_list->next = f;
-        f->prev = file_list;
-    }
+    f->prev = file_list;
     file_list = f;
+    f->blocks_num = 0;
     return f;
 }
 
@@ -121,114 +126,164 @@ file_delete(struct file *f)
     }
     free(f->name);
     struct file *prev = f->prev, *next = f->next;
-    if (prev != NULL) {
+    if (prev != NULL)
         prev->next = next;
-        if (file_list == f)
-            file_list = prev;
-    } else if (file_list == f)
-        file_list = NULL;
     if (next != NULL)
         next->prev = prev;
+    else
+        file_list = prev;
     free(f);
 }
 
-static struct filedesc *
+static struct file *
+file_get(const char *name)
+{
+    struct file *file = file_list;
+    while (file != NULL) {  // TODO replace with name-file map
+        if (strcmp(file->name, name) == 0)
+            break;
+        file = file->prev;
+    }
+    return file;
+}
+
+static int
+file_read(struct file *file, char *buf, size_t size)  // TODO accept pointer in memory
+{
+    struct block *cur_b = file->block_list;
+    size_t size_left = size;
+    while (cur_b != NULL && size_left > 0) {
+        size_t to_read = min(size_left, (size_t) cur_b->occupied);
+        memcpy(buf, cur_b->memory, to_read);
+        size_left -= to_read;
+        cur_b = cur_b->next;
+    }
+    return size - size_left;
+}
+
+static int
+file_write(struct file *file, const char *buf, size_t size)  // TODO accept pointer in memory
+{
+    size_t size_left = size;
+    while (size_left > 0) {
+        if (file->last_block == NULL || file->last_block->occupied == BLOCK_SIZE) {
+            if (BLOCK_SIZE * (file->blocks_num+1) > MAX_FILE_SIZE) {
+                if (size_left == size) {
+                    ufs_error_code = UFS_ERR_NO_MEM;
+                    return -1;
+                }
+                break;
+            }
+            file->last_block = block_new(file->last_block);
+            if (file->block_list == NULL)
+                file->block_list = file->last_block;
+        }
+        struct block *cur_b = file->last_block;
+        size_t to_write = min(BLOCK_SIZE - (size_t) cur_b->occupied, size_left);
+        memcpy(cur_b->memory, buf, to_write);
+        cur_b->occupied = max((size_t) cur_b->occupied, to_write);
+        size_left -= to_write;
+    }
+    return size - size_left;
+}
+
+static int
 filedesc_new(struct file *file)
 {
-    struct filedesc *_fd = (struct filedesc *) malloc(sizeof(*_fd));
-    _fd->file = file;
+    struct filedesc *fd_ = (struct filedesc *) malloc(sizeof(*fd_));
+    fd_->file = file;
     ++file->refs;
     if (file_descriptor_count == file_descriptor_capacity) {
         file_descriptor_capacity = (file_descriptor_capacity + 1) * 2;
-        file_descriptors = realloc(file_descriptors, sizeof(*file_descriptors) * file_descriptor_capacity);
+        file_descriptors = realloc(file_descriptors, sizeof(struct filedesc *) * file_descriptor_capacity);
     } else {
         assert(file_descriptor_count < file_descriptor_capacity);
     }
-    _fd->pos = file_descriptor_count;
-    file_descriptors[file_descriptor_count++] = _fd;
-    return _fd;
+    file_descriptors[file_descriptor_count++] = fd_;
+    return file_descriptor_count - 1;
+}
+
+static struct filedesc *
+filedesc_get(int fd)
+{
+    if (fd < 0 || fd >= file_descriptor_count) {
+        return NULL;
+    }
+    return file_descriptors[fd];
 }
 
 static void
-filedesc_delete(struct filedesc *_fd)
+filedesc_delete(struct filedesc * fd_)
 {
-    --_fd->file->refs;
-    file_descriptors[_fd->pos] = file_descriptors[file_descriptor_count--];
-    free(_fd);
+    assert(fd_ != NULL);
+    --(fd_->file->refs);
+    --file_descriptor_count;
+    free(fd_);
 }
 
 int
 ufs_open(const char *filename, int flags)
 {
-    (void)block_new;
-    (void)file_delete;
-    (void)filedesc_delete; // todo remove
-
-    // todo UFS_ERR_NO_MEM
-    struct file *file = file_list;
-    while (file != NULL) {
-        if (strcmp(file->name, filename) == 0) {
-            return filedesc_new(file)->pos;
-        }
-        file = file->prev;
-    }
+    struct file *file = file_get(filename);
+    if (file)
+        return filedesc_new(file);
     if ((flags & UFS_CREATE) == 0) {
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
     file = file_new(filename);
-    return filedesc_new(file)->pos;
-}
-
-ssize_t
-ufs_write(int fd, const char *buf, size_t size)
-{
-	/* IMPLEMENT THIS FUNCTION */
-	(void)fd;
-	(void)buf;
-	(void)size;
-	ufs_error_code = UFS_ERR_NOT_IMPLEMENTED;  // todo remove
-
-    // TODO according to tests
-	return -1;
+    return filedesc_new(file);
 }
 
 ssize_t
 ufs_read(int fd, char *buf, size_t size)
 {
-	/* IMPLEMENT THIS FUNCTION */
-	(void)fd;
-	(void)buf;
-	(void)size;
-	ufs_error_code = UFS_ERR_NOT_IMPLEMENTED;  // todo remove
-
-	// todo support reading after file deletion: "content will live until the last descriptor is closed"
-    // TODO according to tests
-	return -1;
+    struct filedesc *fd_ = filedesc_get(fd);
+    if (fd_ == NULL) {
+        ufs_error_code = UFS_ERR_NO_FILE;
+        return -1;
+    }
+    return file_read(fd_->file, buf, size);
 }
 
+ssize_t
+ufs_write(int fd, const char *buf, size_t size)
+{
+    struct filedesc *fd_ = filedesc_get(fd);
+    if (fd_ == NULL) {
+        ufs_error_code = UFS_ERR_NO_FILE;
+        return -1;
+    }
+    return file_write(fd_->file, buf, size);
+}
+
+/**
+ * Close a file.
+ * @param fd File descriptor from ufs_open().
+ * @retval 0 Success.
+ * @retval -1 Error occurred. Check ufs_errno() for a code.
+ *     - UFS_ERR_NO_FILE - invalid file descriptor.
+ */
 int
 ufs_close(int fd)
 {
-    if (fd < 0 || fd >= file_descriptor_count) {
+    struct filedesc *fd_ = filedesc_get(fd);
+    if (fd_ == NULL) {
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
     // todo should double close close the same filedescriptor? Now it might close two different
-    filedesc_delete(file_descriptors[fd]);
+    filedesc_delete(fd_);
 	return 0;
 }
 
 int
 ufs_delete(const char *filename)
 {
-    struct file *file = file_list;
-    while (file != NULL) {
-        if (strcmp(file->name, filename) == 0) {
-            file_delete(file);
-            return 0;
-        }
-        file = file->prev;
+    struct file *file = file_get(filename);
+    if (file) {
+        file_delete(file);
+        return 0;
     }
     ufs_error_code = UFS_ERR_NO_FILE;
 	return -1;
@@ -237,8 +292,16 @@ ufs_delete(const char *filename)
 void
 ufs_destroy(void)
 {
-
-    // TODO according to tests
+    for (int i = 0; i < file_descriptor_count; ++i) {
+        struct filedesc *fd_ = file_descriptors[i];
+        filedesc_delete(fd_);
+    }
+    while (file_list != NULL) {
+        struct file *f = file_list;
+        file_list = f->prev;
+        file_delete(f);
+    }
 }
 
+// TODO according to tests
 // todo recheck requirements

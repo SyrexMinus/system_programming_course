@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -56,6 +57,8 @@ struct filedesc {
 	struct file *file;
 
 	/* PUT HERE OTHER MEMBERS */
+	size_t ptr;
+    size_t write_ptr;
 };
 
 /**
@@ -117,13 +120,19 @@ file_new(const char *name)
 }
 
 static void
-file_delete(struct file *f)
+file_blocks_delete(struct file *f)
 {
     while (f->block_list != NULL) {
         struct block *b = f->block_list;
         f->block_list = b->next;
         block_delete(b);
     }
+}
+
+static void
+file_delete(struct file *f)
+{
+    file_blocks_delete(f);
     free(f->name);
     struct file *prev = f->prev, *next = f->next;
     if (prev != NULL)
@@ -147,26 +156,78 @@ file_get(const char *name)
     return file;
 }
 
-static int
-file_read(struct file *file, char *buf, size_t size)  // TODO accept pointer in memory
+static ssize_t
+file_read(struct file *file, char *buf, size_t size, size_t beg)
 {
     struct block *cur_b = file->block_list;
-    size_t size_left = size;
+    size_t size_left = beg;
+    while (cur_b != NULL && BLOCK_SIZE <= size_left) {
+        size_left -= BLOCK_SIZE;
+        cur_b = cur_b->next;
+    }
+    assert(cur_b == NULL || size_left < BLOCK_SIZE);
+    if (cur_b == NULL && size_left > 0)
+        assert(0);
+    assert(size_left < BLOCK_SIZE);
+    if (cur_b != NULL) {
+        assert(0 <= size_left);
+        assert(size_left <= (size_t) cur_b->occupied);
+        //printf("cur_b->occupied %d\n", cur_b->occupied);
+        size_t to_read = min(size, (size_t) cur_b->occupied - size_left);
+        if (to_read == size)
+            assert(size <= (size_t) cur_b->occupied - size_left);
+        else
+            assert(size > (size_t) cur_b->occupied - size_left);
+        memcpy(buf, &(cur_b->memory[size_left]), to_read);
+        buf = &(buf[to_read]);
+        size_left = size - to_read;
+        cur_b = cur_b->next;
+    } else {
+        assert(size_left == 0);
+        size_left = size;
+    }
     while (cur_b != NULL && size_left > 0) {
         size_t to_read = min(size_left, (size_t) cur_b->occupied);
         memcpy(buf, cur_b->memory, to_read);
+        buf = &(buf[to_read]);
         size_left -= to_read;
         cur_b = cur_b->next;
     }
     return size - size_left;
 }
 
-static int
-file_write(struct file *file, const char *buf, size_t size)  // TODO accept pointer in memory
+static ssize_t
+file_write(struct file *file, const char *buf, size_t size, size_t beg)
 {
-    size_t size_left = size;
+    struct block *cur_b = file->block_list;
+    size_t size_left = beg;
+    while (cur_b != NULL && BLOCK_SIZE <= size_left) {
+        size_left -= BLOCK_SIZE;
+        cur_b = cur_b->next;
+    }
+    assert(cur_b == NULL || size_left < BLOCK_SIZE);
+    if (cur_b == NULL && size_left > 0)
+        assert(0);
+    assert(size_left < BLOCK_SIZE);
+    if (cur_b != NULL) {
+        assert(0 <= size_left);
+        assert(size_left <= (size_t) cur_b->occupied);
+        size_t to_write = min(size, BLOCK_SIZE - size_left);
+        if (to_write == size)
+            assert(size <= BLOCK_SIZE - size_left);
+        else
+            assert(size > BLOCK_SIZE - size_left);
+        memcpy(&(cur_b->memory[size_left]), buf, to_write);
+        buf = &(buf[to_write]);
+        cur_b->occupied = max((size_t) cur_b->occupied, size_left + to_write);
+        size_left = size - to_write;
+        cur_b = cur_b->next;
+    } else {
+        assert(size_left == 0);
+        size_left = size;
+    }
     while (size_left > 0) {
-        if (file->last_block == NULL || file->last_block->occupied == BLOCK_SIZE) {
+        if (cur_b == NULL) {
             if (BLOCK_SIZE * (file->blocks_num+1) > MAX_FILE_SIZE) {
                 if (size_left == size) {
                     ufs_error_code = UFS_ERR_NO_MEM;
@@ -174,16 +235,19 @@ file_write(struct file *file, const char *buf, size_t size)  // TODO accept poin
                 }
                 break;
             }
-            file->last_block = block_new(file->last_block);
+            cur_b = block_new(file->last_block);
+            file->last_block = cur_b;
             if (file->block_list == NULL)
                 file->block_list = file->last_block;
         }
-        struct block *cur_b = file->last_block;
         size_t to_write = min(BLOCK_SIZE - (size_t) cur_b->occupied, size_left);
         memcpy(cur_b->memory, buf, to_write);
+        buf = &(buf[to_write]);
         cur_b->occupied = max((size_t) cur_b->occupied, to_write);
         size_left -= to_write;
+        cur_b = cur_b->next;
     }
+    //printf("file->block_list->memory %s\n", file->block_list->memory);
     return size - size_left;
 }
 
@@ -193,6 +257,7 @@ filedesc_new(struct file *file)
     struct filedesc *fd_ = (struct filedesc *) malloc(sizeof(*fd_));
     fd_->file = file;
     ++file->refs;
+    fd_->ptr = 0;
     if (file_descriptor_count == file_descriptor_capacity) {
         file_descriptor_capacity = (file_descriptor_capacity + 1) * 2;
         file_descriptors = realloc(file_descriptors, sizeof(struct filedesc *) * file_descriptor_capacity);
@@ -243,7 +308,9 @@ ufs_read(int fd, char *buf, size_t size)
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
-    return file_read(fd_->file, buf, size);
+    ssize_t read_b = file_read(fd_->file, buf, size, fd_->ptr);
+    fd_->ptr += read_b;
+    return read_b;
 }
 
 ssize_t
@@ -254,16 +321,11 @@ ufs_write(int fd, const char *buf, size_t size)
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
-    return file_write(fd_->file, buf, size);
+    ssize_t written_b = file_write(fd_->file, buf, size, fd_->ptr);
+    fd_->ptr += written_b;
+    return written_b;
 }
 
-/**
- * Close a file.
- * @param fd File descriptor from ufs_open().
- * @retval 0 Success.
- * @retval -1 Error occurred. Check ufs_errno() for a code.
- *     - UFS_ERR_NO_FILE - invalid file descriptor.
- */
 int
 ufs_close(int fd)
 {
@@ -272,7 +334,6 @@ ufs_close(int fd)
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
-    // todo should double close close the same filedescriptor? Now it might close two different
     filedesc_delete(fd_);
 	return 0;
 }
@@ -303,5 +364,6 @@ ufs_destroy(void)
     }
 }
 
+// TODO remove asserts
 // TODO according to tests
 // todo recheck requirements

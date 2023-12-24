@@ -48,6 +48,7 @@ struct file {
 	/* PUT HERE OTHER MEMBERS */
 	/** number of blocks occupied to control file size. */
 	size_t blocks_num;
+	int to_delete;
 };
 
 /** Double-linked list of all files. Last file. */
@@ -58,7 +59,7 @@ struct filedesc {
 
 	/* PUT HERE OTHER MEMBERS */
 	size_t ptr;
-    size_t write_ptr;
+    int list_place;
 };
 
 /**
@@ -116,6 +117,7 @@ file_new(const char *name)
     f->prev = file_list;
     file_list = f;
     f->blocks_num = 0;
+    f->to_delete = 0;
     return f;
 }
 
@@ -149,7 +151,7 @@ file_get(const char *name)
 {
     struct file *file = file_list;
     while (file != NULL) {  // TODO replace with name-file map
-        if (strcmp(file->name, name) == 0)
+        if (strcmp(file->name, name) == 0 && !file->to_delete)
             break;
         file = file->prev;
     }
@@ -172,7 +174,6 @@ file_read(struct file *file, char *buf, size_t size, size_t beg)
     if (cur_b != NULL) {
         assert(0 <= size_left);
         assert(size_left <= (size_t) cur_b->occupied);
-        //printf("cur_b->occupied %d\n", cur_b->occupied);
         size_t to_read = min(size, (size_t) cur_b->occupied - size_left);
         if (to_read == size)
             assert(size <= (size_t) cur_b->occupied - size_left);
@@ -247,7 +248,6 @@ file_write(struct file *file, const char *buf, size_t size, size_t beg)
         size_left -= to_write;
         cur_b = cur_b->next;
     }
-    //printf("file->block_list->memory %s\n", file->block_list->memory);
     return size - size_left;
 }
 
@@ -259,11 +259,15 @@ filedesc_new(struct file *file)
     ++file->refs;
     fd_->ptr = 0;
     if (file_descriptor_count == file_descriptor_capacity) {
+        int old_capacity = file_descriptor_capacity;
         file_descriptor_capacity = (file_descriptor_capacity + 1) * 2;
         file_descriptors = realloc(file_descriptors, sizeof(struct filedesc *) * file_descriptor_capacity);
+        for (int i = old_capacity; i < file_descriptor_capacity; ++i)
+            file_descriptors[i] = NULL;
     } else {
         assert(file_descriptor_count < file_descriptor_capacity);
     }
+    fd_->list_place = file_descriptor_count;
     file_descriptors[file_descriptor_count++] = fd_;
     return file_descriptor_count - 1;
 }
@@ -271,7 +275,7 @@ filedesc_new(struct file *file)
 static struct filedesc *
 filedesc_get(int fd)
 {
-    if (fd < 0 || fd >= file_descriptor_count) {
+    if (fd < 0 || fd >= file_descriptor_capacity) {
         return NULL;
     }
     return file_descriptors[fd];
@@ -283,6 +287,9 @@ filedesc_delete(struct filedesc * fd_)
     assert(fd_ != NULL);
     --(fd_->file->refs);
     --file_descriptor_count;
+    if (fd_->file->to_delete && fd_->file->refs == 0)
+        file_delete(fd_->file);
+    file_descriptors[fd_->list_place] = NULL;
     free(fd_);
 }
 
@@ -343,7 +350,10 @@ ufs_delete(const char *filename)
 {
     struct file *file = file_get(filename);
     if (file) {
-        file_delete(file);
+        if (file->refs == 0)
+            file_delete(file);
+        else
+            file->to_delete = 1;
         return 0;
     }
     ufs_error_code = UFS_ERR_NO_FILE;

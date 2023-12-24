@@ -238,6 +238,7 @@ file_write(struct file *file, const char *buf, size_t size, size_t beg)
             }
             cur_b = block_new(file->last_block);
             file->last_block = cur_b;
+            file->blocks_num += 1;
             if (file->block_list == NULL)
                 file->block_list = file->last_block;
         }

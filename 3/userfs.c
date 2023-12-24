@@ -60,6 +60,8 @@ struct filedesc {
 	/* PUT HERE OTHER MEMBERS */
 	size_t ptr;
     int list_place;
+    int read_allowed;
+    int write_allowed;
 };
 
 /**
@@ -270,7 +272,9 @@ filedesc_new(struct file *file)
     }
     fd_->list_place = file_descriptor_count;
     file_descriptors[file_descriptor_count++] = fd_;
-    return file_descriptor_count - 1;
+    fd_->read_allowed = 0;
+    fd_->write_allowed = 0;
+    return fd_->list_place;
 }
 
 static struct filedesc *
@@ -298,14 +302,25 @@ int
 ufs_open(const char *filename, int flags)
 {
     struct file *file = file_get(filename);
-    if (file)
-        return filedesc_new(file);
-    if ((flags & UFS_CREATE) == 0) {
-        ufs_error_code = UFS_ERR_NO_FILE;
-        return -1;
+    if (file == NULL) {
+        if ((flags & UFS_CREATE) == 0) {
+            ufs_error_code = UFS_ERR_NO_FILE;
+            return -1;
+        }
+        file = file_new(filename);
     }
-    file = file_new(filename);
-    return filedesc_new(file);
+    int fd = filedesc_new(file);
+    struct filedesc *fd_ = filedesc_get(fd);
+    if ((flags & UFS_READ_ONLY) == UFS_READ_ONLY || (flags & UFS_WRITE_ONLY) == UFS_WRITE_ONLY) {
+        if ((flags & UFS_READ_ONLY) == UFS_READ_ONLY)
+            fd_->read_allowed = 1;
+        if ((flags & UFS_WRITE_ONLY) == UFS_WRITE_ONLY)
+            fd_->write_allowed = 1;
+    } else {
+        fd_->read_allowed = 1;
+        fd_->write_allowed = 1;
+    }
+    return fd;
 }
 
 ssize_t
@@ -314,6 +329,10 @@ ufs_read(int fd, char *buf, size_t size)
     struct filedesc *fd_ = filedesc_get(fd);
     if (fd_ == NULL) {
         ufs_error_code = UFS_ERR_NO_FILE;
+        return -1;
+    }
+    if (!fd_->read_allowed) {
+        ufs_error_code = UFS_ERR_NO_PERMISSION;
         return -1;
     }
     ssize_t read_b = file_read(fd_->file, buf, size, fd_->ptr);
@@ -327,6 +346,10 @@ ufs_write(int fd, const char *buf, size_t size)
     struct filedesc *fd_ = filedesc_get(fd);
     if (fd_ == NULL) {
         ufs_error_code = UFS_ERR_NO_FILE;
+        return -1;
+    }
+    if (!fd_->write_allowed) {
+        ufs_error_code = UFS_ERR_NO_PERMISSION;
         return -1;
     }
     ssize_t written_b = file_write(fd_->file, buf, size, fd_->ptr);

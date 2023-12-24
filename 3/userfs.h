@@ -23,6 +23,7 @@
  * It is important to define these macros here, in the header,
  * because it is used by tests.
  */
+#define NEED_OPEN_FLAGS
 
 /**
  * Flags for ufs_open call.

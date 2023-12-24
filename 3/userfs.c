@@ -368,13 +368,10 @@ ufs_destroy(void)
         struct filedesc *fd_ = file_descriptors[i];
         filedesc_delete(fd_);
     }
+    free(file_descriptors);
     while (file_list != NULL) {
         struct file *f = file_list;
         file_list = f->prev;
         file_delete(f);
     }
 }
-
-// TODO remove asserts
-// TODO according to tests
-// todo recheck requirements
